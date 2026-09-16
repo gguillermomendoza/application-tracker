@@ -1,94 +1,40 @@
-from pathlib import Path
-
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-
-
-SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly"
-]
-
-TOKEN_FILE = Path("token.json")
-CREDENTIALS_FILE = Path("credentials.json")
-
-
-def authenticate():
-    creds = None
-
-    if TOKEN_FILE.exists():
-        creds = Credentials.from_authorized_user_file(
-            TOKEN_FILE,
-            SCOPES,
-        )
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                CREDENTIALS_FILE,
-                SCOPES,
-            )
-            creds = flow.run_local_server(port=0)
-
-        TOKEN_FILE.write_text(creds.to_json())
-
-    return creds
+from src.extraction import extract_application_event
+from src.gmail_client import fetch_recent_messages
 
 
 def main():
-    creds = authenticate()
-
-    gmail = build(
-        "gmail",
-        "v1",
-        credentials=creds,
+    messages = fetch_recent_messages(
+        max_results=5,
+        query='newer_than:90d "thank you for applying"',
     )
 
-    profile = (
-        gmail.users()
-        .getProfile(userId="me")
-        .execute()
-    )
+    print(f"Found {len(messages)} Gmail messages.\n")
 
-    print(f"\nConnected Gmail account: {profile['emailAddress']}\n")
+    for message in messages:
+        print("=" * 70)
+        print(f"Message ID: {message['message_id']}")
+        print(f"From:       {message['sender']}")
+        print(f"Subject:    {message['subject']}")
+        print(f"Date:       {message['received_at']}")
+        print()
 
-    results = (
-        gmail.users()
-        .messages()
-        .list(
-            userId="me",
-            maxResults=5,
-        )
-        .execute()
-    )
-
-    messages = results.get("messages", [])
-
-    print("Five recent messages:\n")
-
-    for i, message in enumerate(messages, start=1):
-        msg = (
-            gmail.users()
-            .messages()
-            .get(
-                userId="me",
-                id=message["id"],
-                format="metadata",
-                metadataHeaders=["Subject", "From"],
+        try:
+            event = extract_application_event(
+                subject=message["subject"],
+                sender=message["sender"],
+                received_at=message["received_at"],
+                body=message["body"],
             )
-            .execute()
-        )
 
-        headers = {
-            h["name"]: h["value"]
-            for h in msg["payload"]["headers"]
-        }
+            print(event.model_dump_json(indent=2))
 
-        print(f"{i}. {headers.get('Subject', '(no subject)')}")
-        print(f"   From: {headers.get('From', '(unknown)')}\n")
+        except Exception as exc:
+            print(
+                f"Extraction failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+        print()
 
 
 if __name__ == "__main__":
