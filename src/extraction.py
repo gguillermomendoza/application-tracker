@@ -8,6 +8,22 @@ from src.schemas import ApplicationEvent
 
 MODEL = "gemini-3.5-flash"
 
+client = genai.Client(
+    vertexai=True,
+    project=os.environ["GOOGLE_CLOUD_PROJECT"],
+    location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
+    http_options=types.HttpOptions(
+        api_version="v1",
+        retry_options=types.HttpRetryOptions(
+            attempts=5,
+            initial_delay=1.0,
+            max_delay=30.0,
+            exp_base=2.0,
+            jitter=1.0,
+            http_status_codes=[429, 500, 502, 503, 504],
+        ),
+    ),
+)
 
 def get_vertex_client() -> genai.Client:
     project = os.environ["GOOGLE_CLOUD_PROJECT"]

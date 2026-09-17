@@ -7,3 +7,4 @@ __pycache__/
 token_sheets_readonly.json
 processed_messages.json
 processed_messages.tmp
+token_sheets_write.json

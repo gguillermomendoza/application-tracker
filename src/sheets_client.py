@@ -122,3 +122,86 @@ def column_index_to_letter(index: int) -> str:
         letters = chr(65 + remainder) + letters
 
     return letters
+from pathlib import Path
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+
+
+SHEETS_READONLY_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+]
+
+SHEETS_WRITE_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+]
+
+READONLY_TOKEN_PATH = Path("token_sheets_readonly.json")
+WRITE_TOKEN_PATH = Path("token_sheets_write.json")
+CREDENTIALS_PATH = Path("credentials.json")
+
+
+def _get_sheets_credentials(
+    *,
+    scopes: list[str],
+    token_path: Path,
+) -> Credentials:
+    creds = None
+
+    if token_path.exists():
+        creds = Credentials.from_authorized_user_file(
+            str(token_path),
+            scopes,
+        )
+
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+
+    if not creds or not creds.valid:
+        flow = InstalledAppFlow.from_client_secrets_file(
+            str(CREDENTIALS_PATH),
+            scopes,
+        )
+        creds = flow.run_local_server(port=0)
+
+    token_path.write_text(creds.to_json())
+
+    return creds
+
+
+def get_sheets_service():
+    """
+    Existing read-only Sheets service.
+    """
+    creds = _get_sheets_credentials(
+        scopes=SHEETS_READONLY_SCOPES,
+        token_path=READONLY_TOKEN_PATH,
+    )
+
+    return build(
+        "sheets",
+        "v4",
+        credentials=creds,
+    )
+
+
+def get_sheets_write_service():
+    """
+    Writable Sheets service.
+
+    Having this service does NOT authorize arbitrary application code
+    to construct writes. It will eventually be consumed only by the
+    constrained Sheet writer.
+    """
+    creds = _get_sheets_credentials(
+        scopes=SHEETS_WRITE_SCOPES,
+        token_path=WRITE_TOKEN_PATH,
+    )
+
+    return build(
+        "sheets",
+        "v4",
+        credentials=creds,
+    )
