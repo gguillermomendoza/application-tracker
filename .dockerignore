@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+.github/
+
+# Local Python environments / caches
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets / OAuth material
+credentials.json
+token.json
+token_sheets_readonly.json
+token_sheets_write.json
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local persistence
+processed_messages.json
+processed_message_ids.json
+
+# Tests
+tests/
+
+# Local/manual tools
+inspect_sheet.py
+manual_write_test.py
+manual_firestore_test.py
+manual_review_queue_test.py
+migrate_processed_messages_to_firestore.py
+verify_sheets_write_auth.py
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# IDE / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
