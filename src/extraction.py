@@ -8,22 +8,15 @@ from src.schemas import ApplicationEvent
 
 MODEL = "gemini-3.5-flash"
 
-client = genai.Client(
-    vertexai=True,
-    project=os.environ["GOOGLE_CLOUD_PROJECT"],
-    location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
-    http_options=types.HttpOptions(
-        api_version="v1",
-        retry_options=types.HttpRetryOptions(
-            attempts=5,
-            initial_delay=1.0,
-            max_delay=30.0,
-            exp_base=2.0,
-            jitter=1.0,
-            http_status_codes=[429, 500, 502, 503, 504],
-        ),
-    ),
+RETRY_OPTIONS = types.HttpRetryOptions(
+    attempts=5,
+    initial_delay=1.0,
+    max_delay=30.0,
+    exp_base=2.0,
+    jitter=1.0,
+    http_status_codes=[429, 500, 502, 503, 504],
 )
+
 
 def get_vertex_client() -> genai.Client:
     project = os.environ["GOOGLE_CLOUD_PROJECT"]
@@ -33,8 +26,11 @@ def get_vertex_client() -> genai.Client:
         vertexai=True,
         project=project,
         location=location,
-    )
-
+        http_options=types.HttpOptions(
+            api_version="v1",
+            retry_options=RETRY_OPTIONS,
+        ),
+    )    
 
 def extract_application_event(
     *,
@@ -45,8 +41,6 @@ def extract_application_event(
 ) -> ApplicationEvent:
     client = get_vertex_client()
 
-    # Prevent extremely large email threads/signatures from being sent
-    # during this first implementation milestone.
     cleaned_body = body.strip()[:15_000]
 
     prompt = f"""
@@ -81,21 +75,22 @@ Received:
 Body:
 {cleaned_body}
 """
-    response = client.models.generate_content(
-    model=MODEL,
-    contents=prompt,
-    config=types.GenerateContentConfig(
-        temperature=0,
-        response_mime_type="application/json",
-        response_schema=ApplicationEvent,
-        automatic_function_calling=types.AutomaticFunctionCallingConfig(
-            disable=True
-        ),
-    ),
-)
 
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0,
+            response_mime_type="application/json",
+            response_schema=ApplicationEvent,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
+        ),
+    )
 
     if response.text is None:
         raise ValueError("Gemini returned an empty response.")
 
     return ApplicationEvent.model_validate(response.parsed)
+

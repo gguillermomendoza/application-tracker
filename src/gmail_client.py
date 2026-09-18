@@ -1,47 +1,60 @@
 import base64
 import html
+import os
 import re
 from pathlib import Path
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+from src.oauth_credentials import load_user_oauth_credentials
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+]
 
 ROOT = Path(__file__).resolve().parents[1]
-CREDENTIALS_PATH = ROOT / "credentials.json"
-TOKEN_PATH = ROOT / "token.json"
+
+CREDENTIALS_PATH = Path(
+    os.getenv(
+        "GOOGLE_OAUTH_CLIENT_SECRETS_PATH",
+        str(ROOT / "credentials.json"),
+    )
+)
+
+TOKEN_PATH = Path(
+    os.getenv(
+        "GMAIL_TOKEN_PATH",
+        str(ROOT / "token.json"),
+    )
+)
 
 
 def get_gmail_service():
-    creds = None
+    allow_interactive = (
+        os.getenv("ALLOW_INTERACTIVE_OAUTH", "true").lower()
+        == "true"
+    )
 
-    if TOKEN_PATH.exists():
-        creds = Credentials.from_authorized_user_file(
-            str(TOKEN_PATH),
-            SCOPES,
-        )
+    persist_token = (
+        os.getenv("PERSIST_OAUTH_TOKENS", "true").lower()
+        == "true"
+    )
 
-    if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+    creds = load_user_oauth_credentials(
+        token_path=TOKEN_PATH,
+        client_secrets_path=CREDENTIALS_PATH,
+        scopes=SCOPES,
+        allow_interactive=allow_interactive,
+        persist_token=persist_token,
+    )
 
-    elif not creds or not creds.valid:
-        flow = InstalledAppFlow.from_client_secrets_file(
-            str(CREDENTIALS_PATH),
-            SCOPES,
-        )
+    return build(
+        "gmail",
+        "v1",
+        credentials=creds,
+    )
 
-        creds = flow.run_local_server(port=0)
-
-        TOKEN_PATH.write_text(
-            creds.to_json(),
-            encoding="utf-8",
-        )
-
-    return build("gmail", "v1", credentials=creds)
 
 def _decode_base64url(data: str) -> str:
     padding = "=" * (-len(data) % 4)
@@ -54,7 +67,11 @@ def _decode_base64url(data: str) -> str:
     )
 
 
-def _get_part_data(service, message_id: str, part: dict) -> str:
+def _get_part_data(
+    service,
+    message_id: str,
+    part: dict,
+) -> str:
     body = part.get("body", {})
 
     data = body.get("data")
@@ -80,9 +97,13 @@ def _get_part_data(service, message_id: str, part: dict) -> str:
         attachment_data = attachment.get("data")
 
         if attachment_data:
-            return _decode_base64url(attachment_data)
+            return _decode_base64url(
+                attachment_data
+            )
 
     return ""
+
+
 def _html_to_text(value: str) -> str:
     value = re.sub(
         r"<(script|style).*?>.*?</\1>",
@@ -91,23 +112,50 @@ def _html_to_text(value: str) -> str:
         flags=re.DOTALL | re.IGNORECASE,
     )
 
-    value = re.sub(r"<br\s*/?>", "\n", value, flags=re.IGNORECASE)
-    value = re.sub(r"</p>", "\n", value, flags=re.IGNORECASE)
+    value = re.sub(
+        r"<br\s*/?>",
+        "\n",
+        value,
+        flags=re.IGNORECASE,
+    )
 
-    value = re.sub(r"<[^>]+>", "", value)
+    value = re.sub(
+        r"</p>",
+        "\n",
+        value,
+        flags=re.IGNORECASE,
+    )
+
+    value = re.sub(
+        r"<[^>]+>",
+        "",
+        value,
+    )
 
     return html.unescape(value).strip()
 
 
-def _extract_body(service, message_id: str, payload: dict) -> str:
+def _extract_body(
+    service,
+    message_id: str,
+    payload: dict,
+) -> str:
     plain_parts = []
     html_parts = []
 
     def walk(part: dict):
-        mime_type = part.get("mimeType", "")
-        filename = part.get("filename", "")
+        mime_type = part.get(
+            "mimeType",
+            "",
+        )
 
-        # Don't accidentally send resume/document attachments to Gemini.
+        filename = part.get(
+            "filename",
+            "",
+        )
+
+        # Do not send resume/document attachments
+        # or other attached files to Gemini.
         if filename:
             return
 
@@ -131,25 +179,45 @@ def _extract_body(service, message_id: str, payload: dict) -> str:
             if text:
                 html_parts.append(text)
 
-        for child in part.get("parts", []):
+        for child in part.get(
+            "parts",
+            [],
+        ):
             walk(child)
 
     walk(payload)
 
     if plain_parts:
-        return "\n".join(plain_parts).strip()
+        return "\n".join(
+            plain_parts
+        ).strip()
 
     if html_parts:
         return _html_to_text(
-            "\n".join(html_parts)
+            "\n".join(
+                html_parts
+            )
         )
 
     return ""
 
-def _get_header(headers: list[dict], name: str) -> str:
+
+def _get_header(
+    headers: list[dict],
+    name: str,
+) -> str:
     for header in headers:
-        if header.get("name", "").lower() == name.lower():
-            return header.get("value", "")
+        if (
+            header.get(
+                "name",
+                "",
+            ).lower()
+            == name.lower()
+        ):
+            return header.get(
+                "value",
+                "",
+            )
 
     return ""
 
@@ -171,7 +239,10 @@ def fetch_recent_messages(
         .execute()
     )
 
-    messages = result.get("messages", [])
+    messages = result.get(
+        "messages",
+        [],
+    )
 
     parsed_messages = []
 
@@ -189,15 +260,31 @@ def fetch_recent_messages(
             .execute()
         )
 
-        payload = message.get("payload", {})
-        headers = payload.get("headers", [])
+        payload = message.get(
+            "payload",
+            {},
+        )
+
+        headers = payload.get(
+            "headers",
+            [],
+        )
 
         parsed_messages.append(
             {
                 "message_id": message_id,
-                "subject": _get_header(headers, "Subject"),
-                "sender": _get_header(headers, "From"),
-                "received_at": _get_header(headers, "Date"),
+                "subject": _get_header(
+                    headers,
+                    "Subject",
+                ),
+                "sender": _get_header(
+                    headers,
+                    "From",
+                ),
+                "received_at": _get_header(
+                    headers,
+                    "Date",
+                ),
                 "body": _extract_body(
                     service,
                     message_id,
