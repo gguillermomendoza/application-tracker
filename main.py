@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import json
 from src.config import (
     env_bool,
@@ -119,17 +119,14 @@ def handle_application_decision(
     """
 
     message_id = message["message_id"]
-
-    print()
-    print("=" * 72)
-    print(f"ACTION: {decision.action.value.upper()}")
-    print(f"Company: {decision.company}")
-    print(f"Role: {decision.role}")
-    print(f"Existing row: {decision.existing_row}")
-    print(f"Current status: {decision.current_status}")
-    print(f"Proposed status: {decision.proposed_status}")
-    print(f"Reason: {decision.reason}")
-    print("=" * 72)
+    log_event(
+        "decision_made",
+        message_id=message_id,
+        decision=decision.action.value,
+        existing_row=decision.existing_row,
+        current_status=decision.current_status,
+        proposed_status=decision.proposed_status,
+    )
 
     # ------------------------------------------------------------
     # No-write decisions
@@ -289,25 +286,26 @@ def handle_application_decision(
         intent,
         ExistingApplicationUpdate,
     ):
-        print("Type: UPDATE")
-        print(f"Row: {intent.row_number}")
-        print(f"Status: {intent.status}")
-        print(
-            f"Date Updated: {intent.date_updated}"
+        log_event(
+            "write_intent_prepared",
+            write_type="UPDATE",
+            row_number=intent.row_number,
+            status=intent.status,
+            date_updated=intent.date_updated,
         )
 
     elif isinstance(
         intent,
         NewApplicationRow,
     ):
-        print("Type: CREATE")
-        print(f"Date: {intent.applied_date}")
-        print(f"Position: {intent.role}")
-        print(f"Company: {intent.company}")
-        print(f"Status: {intent.status}")
-        print(
-            f"Date Updated: {intent.date_updated}"
+        log_event(
+            "write_intent_prepared",
+            write_type="CREATE",
+            applied_date=intent.applied_date,
+            status=intent.status,
+            date_updated=intent.date_updated,
         )
+
 
     else:
         raise RuntimeError(
@@ -484,10 +482,10 @@ def main() -> None:
         if processed_store.has_processed_message(
             message_id
         ):
-            print(
-                "Skipping already processed message: "
-                f"{message['subject']}"
-            )
+            log_event(
+               "message_skipped_already_processed",
+                message_id=message_id,
+            )       
             continue
 
         # --------------------------------------------------------
@@ -502,28 +500,17 @@ def main() -> None:
                 body=message["body"],
             )
 
-        except Exception as exc:
-            print()
-            print("=" * 72)
-            print(
-                f"EMAIL: {message['subject']}"
-            )
-            print(
-                f"FROM: {message['sender']}"
-            )
-            print(
-                f"MESSAGE ID: {message_id}"
-            )
-            print("ACTION: EXTRACTION_FAILED")
-            print(
-                f"Reason: extraction failed: {exc}"
-            )
-            print("WRITE PERFORMED: NO")
-            print(
-                "MESSAGE NOT MARKED PROCESSED"
-            )
-            print("=" * 72)
 
+        except Exception as exc:
+            log_event(
+                "extraction_failed",
+                severity="ERROR",
+                message_id=message_id,
+                error_type=type(exc).__name__,
+            )
+
+            print("WRITE PERFORMED: NO")
+            print("MESSAGE NOT MARKED PROCESSED")
             # Extraction/API failures remain unprocessed so
             # they can be retried on a future run.
             continue
@@ -540,30 +527,13 @@ def main() -> None:
         # --------------------------------------------------------
         # Print source email / extraction information
         # --------------------------------------------------------
-
-        print()
-        print("=" * 72)
-        print(
-            f"EMAIL: {message['subject']}"
+        log_event(
+            "message_extracted",
+            message_id=message_id,
+            event_type=event.event_type.value,
+            event_date=event.event_date,
+            confidence=round(event.confidence, 2),
         )
-        print(
-            f"FROM: {message['sender']}"
-        )
-        print(
-            f"MESSAGE ID: {message_id}"
-        )
-        print(
-            f"EVENT TYPE: "
-            f"{event.event_type.value}"
-        )
-        print(
-            f"EVENT DATE: {event.event_date}"
-        )
-        print(
-            f"CONFIDENCE: "
-            f"{event.confidence:.2f}"
-        )
-        print("=" * 72)
 
         # --------------------------------------------------------
         # Handle decision and optional real write
@@ -584,29 +554,23 @@ def main() -> None:
                     ),
                 )
             )
-
         except Exception as exc:
-            print()
-            print("=" * 72)
-            print(
-                "DECISION HANDLING FAILED"
+            log_event(
+                "decision_handling_failed",
+                severity="ERROR",
+                message_id=message_id,
+                event_type=event.event_type.value,
+                error_type=type(exc).__name__,
             )
-            print(
-                f"EMAIL: {message['subject']}"
-            )
-            print(
-                f"Reason: {exc}"
-            )
-            print(
-                "MESSAGE NOT MARKED PROCESSED"
-            )
-            print("=" * 72)
+
+            print("MESSAGE NOT MARKED PROCESSED")
 
             # Most importantly, do not mark the Gmail
             # message processed here. Failed Sheet writes
             # and failed review persistence remain eligible
             # for retry.
-            continue
+            continue   
+
 
         # --------------------------------------------------------
         # Refresh tracker after a successful write

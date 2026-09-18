@@ -1,0 +1,35 @@
+﻿displayName: "Job Application Agent - Repeated extraction failures"
+combiner: OR
+enabled: true
+
+conditions:
+  - displayName: "3 or more extraction failures in 30 minutes"
+    conditionThreshold:
+      filter: 'resource.type="cloud_run_job" AND metric.type="logging.googleapis.com/user/job_agent_extraction_failures" AND resource.labels.job_name="job-application-agent" AND resource.labels.location="us-west2"'
+      aggregations:
+        - alignmentPeriod: 1800s
+          perSeriesAligner: ALIGN_SUM
+      comparison: COMPARISON_GT
+      thresholdValue: 2
+      duration: 0s
+      trigger:
+        count: 1
+
+notificationChannels:
+  - "projects/job-application-tracker-508819/notificationChannels/690867322467350713"
+
+alertStrategy:
+  autoClose: 1800s
+
+documentation:
+  content: |
+    The Job Application Agent produced at least 3 structured extraction_failed
+    events within a 30-minute window.
+
+    A single extraction failure is intentionally non-fatal. Repeated failures
+    can indicate a persistent Vertex AI, model availability, extraction, or
+    upstream data issue.
+
+    Extraction failures do not write to the tracker and do not mark the Gmail
+    message processed.
+  mimeType: "text/markdown"

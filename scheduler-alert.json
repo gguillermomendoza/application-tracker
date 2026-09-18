@@ -1,0 +1,22 @@
+﻿{
+    "displayName":  "Job Application Agent - Scheduler invocation failed",
+    "alertStrategy":  {
+                          "autoClose":  "1800s",
+                          "notificationRateLimit":  {
+                                                        "period":  "300s"
+                                                    }
+                      },
+    "combiner":  "OR",
+    "notificationChannels":  [
+                                 "projects/job-application-tracker-508819/notificationChannels/690867322467350713"
+                             ],
+    "conditions":  [
+                       {
+                           "displayName":  "Scheduler AttemptFinished error",
+                           "conditionMatchedLog":  {
+                                                       "filter":  "resource.type=\"cloud_scheduler_job\" AND resource.labels.job_id=\"job-application-agent-every-15-min\" AND jsonPayload.\"@type\"=\"type.googleapis.com/google.cloud.scheduler.logging.AttemptFinished\" AND severity\u003e=ERROR"
+                                                   }
+                       }
+                   ],
+    "enabled":  true
+}
