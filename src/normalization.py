@@ -40,12 +40,33 @@ def normalize_company(company: str | None) -> str | None:
     """
     return _normalize_text(company)
 
+ROLE_TOKEN_ALIASES = {
+    "swe": "software engineer",
+    "sde": "software development engineer",
+    "ml": "machine learning",
+    "ai": "artificial intelligence",
+    "mle": "machine learning engineer",
+    "de": "data engineer",
+    "pm": "product manager",
+    "qa": "quality assurance",
+}
 
 def normalize_role(role: str | None) -> str | None:
-    """
-    Normalize a role title for later deterministic comparison.
+    normalized = _normalize_text(role)
 
-    Does not attempt to determine whether different titles
-    are semantically equivalent.
-    """
-    return _normalize_text(role)
+    if normalized is None:
+        return None
+
+    tokens = normalized.split()
+
+    expanded_tokens: list[str] = []
+
+    for token in tokens:
+        alias = ROLE_TOKEN_ALIASES.get(token)
+
+        if alias is None:
+            expanded_tokens.append(token)
+        else:
+            expanded_tokens.extend(alias.split())
+
+    return " ".join(expanded_tokens)

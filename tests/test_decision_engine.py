@@ -273,3 +273,56 @@ def test_unmapped_event_requires_review():
     assert decision.action == DecisionAction.REVIEW
     assert decision.existing_row == 37
     assert decision.proposed_status is None
+
+def test_typo_matched_existing_application_updates():
+    applications = [
+        make_tracker_application(
+            row_number=37,
+            company="Salesforce",
+            role="Software Engineer",
+            status="Applied",
+        )
+    ]
+
+    event = make_event(
+        company="Salesforce",
+        role="Softwate Engineer",
+        event_type=EventType.ASSESSMENT,
+        confidence=0.99,
+    )
+
+    decision = decide_application_event(
+        event=event,
+        applications=applications,
+    )
+
+    assert decision.action == DecisionAction.UPDATE
+    assert decision.existing_row == 37
+    assert decision.proposed_status == "Performance Task"
+
+
+def test_typo_matched_application_confirmation_does_not_create_duplicate():
+    applications = [
+        make_tracker_application(
+            row_number=37,
+            company="Salesforce",
+            role="Software Engineer",
+            status="Applied",
+        )
+    ]
+
+    event = make_event(
+        company="Salesforce",
+        role="Softwate Engineer",
+        event_type=EventType.APPLIED,
+        confidence=0.99,
+        explicit_application_confirmation=True,
+    )
+
+    decision = decide_application_event(
+        event=event,
+        applications=applications,
+    )
+
+    assert decision.action == DecisionAction.IGNORE
+    assert decision.existing_row == 37

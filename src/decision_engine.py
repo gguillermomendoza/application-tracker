@@ -2,7 +2,7 @@ from enum import Enum
 
 from pydantic import BaseModel
 
-from src.matching import find_exact_application_matches
+from src.matching import find_application_matches
 from src.schemas import ApplicationEvent, EventType
 from src.tracker_reader import TrackerApplication
 
@@ -77,7 +77,7 @@ def decide_application_event(
             reason="company and role are required for reliable application identification",
         )
 
-    matches = find_exact_application_matches(
+    matches = find_application_matches(
         company=event.company,
         role=event.role,
         applications=applications,
