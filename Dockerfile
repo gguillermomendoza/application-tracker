@@ -14,11 +14,10 @@ WORKDIR /app
 # Install third-party dependencies first so this layer can be cached.
 COPY pyproject.toml uv.lock ./
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync \
-        --locked \
-        --no-dev \
-        --no-install-project
+RUN uv sync \
+    --locked \
+    --no-dev \
+    --no-install-project
 
 # Only copy files required by the production runtime.
 COPY src/ ./src/

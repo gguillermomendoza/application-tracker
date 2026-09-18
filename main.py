@@ -1,5 +1,6 @@
 import os
-from datetime import date
+from datetime import datetime, timezone
+import json
 from src.config import (
     env_bool,
     require_env,
@@ -39,6 +40,21 @@ from src.write_models import (
 
 GMAIL_QUERY = "newer_than:2d"
 
+def log_event(
+    event: str,
+    *,
+    severity: str = "INFO",
+    **fields,
+) -> None:
+    payload = {
+        "severity": severity,
+        "message": event,
+        "event": event,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        **fields,
+    }
+
+    print(json.dumps(payload, default=str), flush=True)
 
 def auto_write_enabled() -> bool:
     return env_bool(
@@ -613,6 +629,17 @@ def main() -> None:
                 "applications loaded."
             )
 
-
 if __name__ == "__main__":
-    main()
+    log_event("run_started")
+
+    try:
+        main()
+    except Exception as exc:
+        log_event(
+            "run_failed",
+            severity="ERROR",
+            error_type=type(exc).__name__,
+        )
+        raise
+
+    log_event("run_succeeded")
