@@ -1,4 +1,4 @@
-# Job Application Agent
+# Job Application Tracker 
 
 A privacy-conscious automation that monitors job-application emails, extracts structured application events with Gemini, reconciles them against an existing application tracker, and safely updates Google Sheets.
 
