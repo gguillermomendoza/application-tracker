@@ -16,19 +16,18 @@ htmlcov/
 
 # Secrets / OAuth material
 credentials.json
-token.json
-token_sheets_readonly.json
-token_sheets_write.json
+token*.json
+
+# Local persistence
+processed_messages.json
+processed_messages.tmp
+
+# Local/manual verification tools
+scripts/
 
 # Environment files
 .env
 .env.*
-!.env.example
-
-# Local persistence
-processed_messages.json
-processed_message_ids.json
-
 # Tests
 tests/
 

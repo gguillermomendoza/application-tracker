@@ -1,17 +1,30 @@
 import os
 
-
 def env_bool(
     name: str,
     *,
     default: bool,
 ) -> bool:
-    value = os.getenv(
-        name,
-        "true" if default else "false",
-    )
+    raw_value = os.getenv(name)
 
-    return value.strip().lower() == "true"
+    if raw_value is None:
+        return default
+
+    return raw_value.strip().lower() == "true"
+
+def validate_bool_env(name: str) -> None:
+    raw_value = os.getenv(name)
+
+    if raw_value is None:
+        return
+
+    value = raw_value.strip().lower()
+
+    if value not in {"true", "false"}:
+        raise RuntimeError(
+            f"{name} must be either 'true' or 'false'."
+        )
+
 
 
 def require_env(name: str) -> str:
@@ -33,7 +46,13 @@ def validate_runtime_config() -> None:
         "PROCESSED_MESSAGE_BACKEND",
         "json",
     ).strip().lower()
-
+    for name in (
+        "AUTO_WRITE",
+        "ALLOW_INTERACTIVE_WRITES",
+        "ALLOW_INTERACTIVE_OAUTH",
+        "PERSIST_OAUTH_TOKENS",
+    ):
+        validate_bool_env(name)
     if backend not in {
         "json",
         "firestore",
@@ -50,7 +69,7 @@ def validate_runtime_config() -> None:
 
     allow_interactive_writes = env_bool(
         "ALLOW_INTERACTIVE_WRITES",
-        default=True,
+        default=False,
     )
 
     if (

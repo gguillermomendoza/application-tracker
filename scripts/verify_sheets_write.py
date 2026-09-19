@@ -12,9 +12,33 @@ from src.write_models import (
 )
 
 
+TEST_SPREADSHEET_ENV = "SHEETS_WRITE_TEST_SPREADSHEET_ID"
+PRODUCTION_SPREADSHEET_ENV = "TRACKER_SPREADSHEET_ID"
+
+
+def get_test_spreadsheet_id() -> str:
+    spreadsheet_id = os.environ.get(TEST_SPREADSHEET_ENV)
+
+    if not spreadsheet_id:
+        raise SystemExit(
+            f"{TEST_SPREADSHEET_ENV} is required. "
+            "This script must target a disposable test spreadsheet."
+        )
+
+    production_id = os.environ.get(PRODUCTION_SPREADSHEET_ENV)
+
+    if production_id and spreadsheet_id == production_id:
+        raise SystemExit(
+            "Refusing to run: test spreadsheet ID matches "
+            "TRACKER_SPREADSHEET_ID."
+        )
+
+    return spreadsheet_id
+
+
 def confirm_write(description: str) -> None:
     print()
-    print("ABOUT TO PERFORM A REAL SHEET WRITE")
+    print("ABOUT TO PERFORM A REAL WRITE TO A TEST SPREADSHEET")
     print(description)
     print()
 
@@ -25,7 +49,6 @@ def confirm_write(description: str) -> None:
 
 
 def test_update(service, spreadsheet_id: str) -> None:
-    # Change this to a real disposable DATA row in the test spreadsheet.
     row_number = 3
 
     intent = ExistingApplicationUpdate(
@@ -75,9 +98,11 @@ def test_create(service, spreadsheet_id: str) -> None:
 
 
 def main() -> None:
-    spreadsheet_id = os.environ["TRACKER_SPREADSHEET_ID"]
+    spreadsheet_id = get_test_spreadsheet_id()
     service = get_sheets_write_service()
 
+    print("Target: disposable test spreadsheet")
+    print()
     print("1. Test UPDATE")
     print("2. Test CREATE")
 

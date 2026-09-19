@@ -1,10 +1,15 @@
+# Python
 .venv/
-credentials.json
-token.json
-.env
 __pycache__/
 *.pyc
-token_sheets_readonly.json
+
+# Environment
+.env
+.env.*
+
+# Local OAuth credentials and tokens
+credentials.json
+token*.json
+
+# Local persistence / migration state
 processed_messages.json
-processed_messages.tmp
-token_sheets_write.json
