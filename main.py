@@ -1,4 +1,3 @@
-import os
 from datetime import date, datetime, timezone
 import json
 from src.config import (
@@ -36,7 +35,9 @@ from src.write_models import (
     NewApplicationRow,
     decision_to_write_intent,
 )
-
+from src.application_source import (
+    detect_application_source,
+    )
 
 GMAIL_QUERY = "newer_than:2d"
 
@@ -66,19 +67,7 @@ def auto_write_enabled() -> bool:
 def interactive_writes_enabled() -> bool:
     return env_bool(
         "ALLOW_INTERACTIVE_WRITES",
-        default=True,
-    )
-
-
-def interactive_writes_enabled() -> bool:
-    return (
-        os.getenv(
-            "ALLOW_INTERACTIVE_WRITES",
-            "true",
-        )
-        .strip()
-        .lower()
-        == "true"
+        default=False
     )
 
 
@@ -124,6 +113,7 @@ def handle_application_decision(
         message_id=message_id,
         decision=decision.action.value,
         existing_row=decision.existing_row,
+        reason=decision.reason,
         current_status=decision.current_status,
         proposed_status=decision.proposed_status,
     )
@@ -258,6 +248,24 @@ def handle_application_decision(
             print("MESSAGE MARKED PROCESSED")
 
             return False
+    # ------------------------------------------------------------
+    # Resolve CREATE-only role fallback
+    # ------------------------------------------------------------
+
+    create_role_fallback = None
+
+    if (
+        decision.action == DecisionAction.CREATE
+        and (
+            decision.role is None
+            or not decision.role.strip()
+        )
+    ):
+        create_role_fallback = (
+            detect_application_source(
+                message["sender"]
+            )
+        )
 
     # ------------------------------------------------------------
     # Decision -> validated write intent
@@ -267,6 +275,7 @@ def handle_application_decision(
         decision,
         date_updated=date_updated,
         applied_date=applied_date,
+        create_role_fallback=create_role_fallback,
     )
 
     if intent is None:

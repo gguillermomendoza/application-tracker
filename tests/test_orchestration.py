@@ -77,15 +77,15 @@ def make_create_decision() -> ApplicationDecision:
         reason="explicit application confirmation",
     )
 
-
 def make_event(
     *,
     event_type: EventType = EventType.ASSESSMENT,
     event_date: str | None = "2026-09-17",
+    role: str | None = "Data Scientist",
 ) -> ApplicationEvent:
     return ApplicationEvent(
         company="Example Corp",
-        role="Data Scientist",
+        role=role,
         event_type=event_type,
         event_date=event_date,
         explicit_application_confirmation=(
@@ -249,6 +249,63 @@ def test_create_writes_once_then_marks_message_processed(
 
     assert mocked_dependencies.review_queue.items == []
 
+def test_missing_role_create_uses_sender_fallback(
+    mocked_dependencies,
+):
+    processed_store = FakeProcessedMessageStore()
+
+    decision = ApplicationDecision(
+        action=DecisionAction.CREATE,
+        existing_row=None,
+        company="Tata Consultancy Services",
+        role=None,
+        current_status=None,
+        proposed_status="Applied",
+        reason="explicit application confirmation",
+    )
+
+    message = make_message()
+    message["sender"] = (
+        "Handshake "
+        "<jobs@notifications.joinhandshake.com>"
+    )
+
+    result = main.handle_application_decision(
+        decision=decision,
+        event=make_event(
+            event_type=EventType.APPLIED,
+            event_date="2026-09-17",
+            role=None,
+        ),
+        message=message,
+        spreadsheet_id=SPREADSHEET_ID,
+        processed_store=processed_store,
+        review_queue=mocked_dependencies.review_queue,
+        auto_write=True,
+    )
+
+    assert result is True
+
+    mocked_dependencies.create_writer.assert_called_once()
+
+    intent = (
+        mocked_dependencies
+        .create_writer
+        .call_args
+        .kwargs["intent"]
+    )
+
+    assert isinstance(
+        intent,
+        NewApplicationRow,
+    )
+    assert intent.company == "Tata Consultancy Services"
+    assert intent.role == "Handshake"
+    assert intent.status == "Applied"
+
+    assert processed_store.has_processed_message(
+        MESSAGE_ID
+    )
 
 def test_writer_exception_does_not_mark_message_processed(
     mocked_dependencies,
@@ -341,6 +398,50 @@ def test_review_and_ignore_never_write(
     else:
         assert mocked_dependencies.review_queue.items == []
 
+def test_decision_log_includes_reason(
+    monkeypatch,
+):
+    processed_store = FakeProcessedMessageStore()
+    review_queue = FakeReviewQueueStore()
+
+    log_event = MagicMock()
+
+    monkeypatch.setattr(
+        main,
+        "log_event",
+        log_event,
+    )
+
+    decision = ApplicationDecision(
+        action=DecisionAction.IGNORE,
+        company="Example Corp",
+        role="Data Scientist",
+        reason="application is already represented in the tracker",
+    )
+
+    result = main.handle_application_decision(
+        decision=decision,
+        event=make_event(),
+        message=make_message(),
+        spreadsheet_id=SPREADSHEET_ID,
+        processed_store=processed_store,
+        review_queue=review_queue,
+    )
+
+    assert result is False
+
+    log_event.assert_called_once_with(
+        "decision_made",
+        message_id=MESSAGE_ID,
+        decision="ignore",
+        reason=(
+            "application is already represented "
+            "in the tracker"
+        ),
+        existing_row=None,
+        current_status=None,
+        proposed_status=None,
+    )
 
 def test_create_without_event_date_never_writes(
     mocked_dependencies,

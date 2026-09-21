@@ -173,5 +173,72 @@ def test_create_cannot_use_non_applied_status():
             role="Data Scientist",
             company="Example Corp",
             status="Offer",  # type: ignore[arg-type]
+            date_updated=TODAY,)
+def test_create_without_role_accepts_explicit_fallback():
+    decision = ApplicationDecision(
+        action=DecisionAction.CREATE,
+        existing_row=None,
+        company="Example Corp",
+        role=None,
+        current_status=None,
+        proposed_status="Applied",
+        reason="explicit application confirmation",
+    )
+
+    intent = decision_to_write_intent(
+        decision,
+        applied_date=TODAY,
+        date_updated=TODAY,
+        create_role_fallback="Handshake",
+    )
+
+    assert intent == NewApplicationRow(
+        applied_date=TODAY,
+        role="Handshake",
+        company="Example Corp",
+        status="Applied",
+        date_updated=TODAY,
+    )
+
+
+def test_create_without_role_or_fallback_fails_closed():
+    decision = ApplicationDecision(
+        action=DecisionAction.CREATE,
+        existing_row=None,
+        company="Example Corp",
+        role=None,
+        current_status=None,
+        proposed_status="Applied",
+        reason="explicit application confirmation",
+    )
+
+    with pytest.raises(
+        WriteIntentError,
+        match="CREATE decision is missing role",
+    ):
+        decision_to_write_intent(
+            decision,
+            applied_date=TODAY,
             date_updated=TODAY,
         )
+
+
+def test_create_fallback_does_not_override_real_role():
+    decision = ApplicationDecision(
+        action=DecisionAction.CREATE,
+        existing_row=None,
+        company="Example Corp",
+        role="Data Scientist",
+        current_status=None,
+        proposed_status="Applied",
+        reason="explicit application confirmation",
+    )
+
+    intent = decision_to_write_intent(
+        decision,
+        applied_date=TODAY,
+        date_updated=TODAY,
+        create_role_fallback="Handshake",
+    )
+
+    assert intent.role == "Data Scientist"

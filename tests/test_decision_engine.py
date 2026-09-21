@@ -1,5 +1,7 @@
+import pytest
 from src.decision_engine import DecisionAction, decide_application_event
 from src.schemas import ApplicationEvent, EventType
+
 from src.tracker_reader import TrackerApplication
 
 
@@ -200,8 +202,7 @@ def test_low_confidence_existing_event_requires_review():
     assert decision.current_status == "Applied"
     assert decision.proposed_status is None
 
-
-def test_missing_role_requires_review():
+def test_missing_role_explicit_application_confirmation_creates():
     event = make_event(
         company="Example Corp",
         role=None,
@@ -215,11 +216,77 @@ def test_missing_role_requires_review():
         applications=[],
     )
 
-    assert decision.action == DecisionAction.REVIEW
+    assert decision.action == DecisionAction.CREATE
+    assert decision.existing_row is None
     assert decision.company == "Example Corp"
     assert decision.role is None
+    assert decision.proposed_status == "Applied"
+
+@pytest.mark.parametrize(
+    "event_type",
+    [
+        EventType.ASSESSMENT,
+        EventType.RECRUITER_SCREEN,
+        EventType.INTERVIEW,
+        EventType.FINAL_INTERVIEW,
+        EventType.REJECTED,
+        EventType.OFFER,
+        EventType.WITHDRAWN,
+    ],
+)
+def test_missing_role_lifecycle_event_requires_review(
+    event_type,
+):
+    applications = [
+        make_tracker_application(
+            row_number=37,
+            company="Example Corp",
+            role="Data Scientist",
+        )
+    ]
+
+    event = make_event(
+        company="Example Corp",
+        role=None,
+        event_type=event_type,
+        confidence=0.99,
+    )
+
+    decision = decide_application_event(
+        event=event,
+        applications=applications,
+    )
+
+    assert decision.action == DecisionAction.REVIEW
+    assert decision.existing_row is None
+    assert decision.company == "Example Corp"
+    assert decision.role is None
+    assert (
+        decision.reason
+        == "no existing tracker application matched this event"
+    )
 
 
+def test_missing_company_requires_review():
+    event = make_event(
+        company=None,
+        role="Data Scientist",
+        event_type=EventType.APPLIED,
+        confidence=0.99,
+        explicit_application_confirmation=True,
+    )
+
+    decision = decide_application_event(
+        event=event,
+        applications=[],
+    )
+
+    assert decision.action == DecisionAction.REVIEW
+    assert (
+        decision.reason
+        == "company is required for reliable application identification"
+    )
+    
 def test_existing_status_already_matches_is_ignored():
     applications = [
         make_tracker_application(

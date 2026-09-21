@@ -68,15 +68,16 @@ def decide_application_event(
             reason="event does not represent a tracker-changing application event",
         )
 
-    # Company + role are required for deterministic application identification.
-    if not event.company or not event.role:
+    # Company is always required for tracker-changing events.
+    # Role-less APPLIED events may still create a new row, but role-less
+    # lifecycle updates cannot match an existing application.
+    if not event.company:
         return ApplicationDecision(
             action=DecisionAction.REVIEW,
             company=event.company,
             role=event.role,
-            reason="company and role are required for reliable application identification",
+            reason="company is required for reliable application identification",
         )
-
     matches = find_application_matches(
         company=event.company,
         role=event.role,

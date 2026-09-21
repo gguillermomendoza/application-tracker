@@ -85,13 +85,14 @@ class NewApplicationRow(BaseModel):
 
 WriteIntent = ExistingApplicationUpdate | NewApplicationRow
 
-
 def decision_to_write_intent(
     decision: ApplicationDecision,
     *,
     date_updated: date,
     applied_date: date | None = None,
+    create_role_fallback: str | None = None,
 ) -> WriteIntent | None:
+
     """
     Convert a validated ApplicationDecision into a narrowly scoped
     Sheet write intent.
@@ -140,11 +141,21 @@ def decision_to_write_intent(
                 "CREATE decision is missing company"
             )
 
-        if decision.role is None or not decision.role.strip():
+        resolved_role = decision.role
+
+        if (
+            resolved_role is None
+            or not resolved_role.strip()
+        ):
+            resolved_role = create_role_fallback
+
+        if (
+            resolved_role is None
+            or not resolved_role.strip()
+        ):
             raise WriteIntentError(
                 "CREATE decision is missing role"
             )
-
         if decision.proposed_status != "Applied":
             raise WriteIntentError(
                 "CREATE decisions may only create rows with status 'Applied'"
@@ -157,7 +168,7 @@ def decision_to_write_intent(
 
         return NewApplicationRow(
             applied_date=applied_date,
-            role=decision.role,
+            role=resolved_role,
             company=decision.company,
             status="Applied",
             date_updated=date_updated,

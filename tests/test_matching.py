@@ -175,3 +175,25 @@ def test_multiple_typo_matches_are_returned_for_ambiguity():
     )
 
     assert len(matches) == 2
+
+def test_missing_role_never_matches_by_company():
+    applications = [
+        make_application(
+            10,
+            "Tata Consultancy Services",
+            "Data Scientist",
+        ),
+        make_application(
+            11,
+            "Tata Consultancy Services",
+            "Software Engineer",
+        ),
+    ]
+
+    matches = find_application_matches(
+        company="Tata Consultancy Services",
+        role=None,
+        applications=applications,
+    )
+
+    assert matches == []
